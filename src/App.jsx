@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 
+const REQUEST_TIMEOUT_MS = 10000
+const SLOW_NOTICE_MS = 3000
+
+class LoadError extends Error {}
+
 const STATUS_STYLES = {
   paid: 'bg-green-100 text-green-800',
   pending: 'bg-yellow-100 text-yellow-800',
@@ -49,6 +54,44 @@ const formatDateTime = (iso) => {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+function LoadingSkeleton({ slow }) {
+  return (
+    <div className="mx-auto max-w-6xl p-6" role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">Loading orders…</span>
+      <div className="mb-6 h-24 animate-pulse rounded-lg bg-gray-200" />
+      <div className="mb-4 h-10 animate-pulse rounded-lg bg-gray-200" />
+      <div className="space-y-2">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="h-10 animate-pulse rounded bg-gray-100" />
+        ))}
+      </div>
+      {slow && (
+        <p className="mt-4 text-center text-sm text-gray-500">
+          This is taking longer than usual. Your connection may be slow…
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ErrorState({ message, onRetry }) {
+  return (
+    <div className="mx-auto max-w-6xl p-6">
+      <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+        <p className="font-semibold">Could not load orders</p>
+        <p className="mt-1 text-sm">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SortButton({ label, active, dir, onClick, align }) {
   return (
     <button
@@ -70,28 +113,63 @@ function App() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [slow, setSlow] = useState(false)
+  const [skipped, setSkipped] = useState(0)
+  const [attempt, setAttempt] = useState(0)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
 
   useEffect(() => {
     const controller = new AbortController()
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
 
-    fetch('/orders.json', { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
-        return res.json()
+    fetch('/orders.json', { signal })
+      .then(async (res) => {
+        if (!res.ok) throw new LoadError(`The server responded with ${res.status} ${res.statusText}`.trim())
+        try {
+          return await res.json()
+        } catch {
+          throw new LoadError('The response is not valid JSON')
+        }
       })
-      .then((data) => setOrders(data.orders ?? []))
+      .then((data) => {
+        if (!Array.isArray(data?.orders)) {
+          throw new LoadError('The response is missing an "orders" list')
+        }
+        const valid = data.orders.filter((o) => o && typeof o === 'object' && o.id)
+        setOrders(valid)
+        setSkipped(data.orders.length - valid.length)
+      })
       .catch((err) => {
-        if (err.name !== 'AbortError') setError(err.message)
+        if (controller.signal.aborted) return
+        if (err.name === 'TimeoutError') {
+          setError(`The request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`)
+        } else if (err instanceof LoadError) {
+          setError(err.message)
+        } else {
+          setError('Network error: could not reach the server. Check your connection.')
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
 
     return () => controller.abort()
-  }, [])
+  }, [attempt])
+
+  useEffect(() => {
+    if (!loading) return
+    const timer = setTimeout(() => setSlow(true), SLOW_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [loading, attempt])
+
+  const retry = () => {
+    setError(null)
+    setSlow(false)
+    setLoading(true)
+    setAttempt((n) => n + 1)
+  }
 
   const statuses = useMemo(() => [...new Set(orders.map((o) => o.status))].sort(), [orders])
 
@@ -134,11 +212,16 @@ function App() {
 
   const isFiltering = query.trim() !== '' || status !== 'all'
 
-  if (loading) return <p className="p-6 text-gray-500">Loading orders…</p>
-  if (error) return <p role="alert" className="p-6 text-red-600">Could not load orders: {error}</p>
+  if (loading) return <LoadingSkeleton slow={slow} />
+  if (error) return <ErrorState message={error} onRetry={retry} />
 
   return (
     <div className="mx-auto max-w-6xl p-6">
+      {skipped > 0 && (
+        <p role="alert" className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+          {skipped} {skipped === 1 ? 'order was' : 'orders were'} skipped because the data was malformed.
+        </p>
+      )}
       <section aria-labelledby="paid-summary-heading" className="mb-6">
         <h2 id="paid-summary-heading" className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-600">
           Paid orders total
