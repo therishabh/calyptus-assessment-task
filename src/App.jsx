@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const STATUS_STYLES = {
   paid: 'bg-green-100 text-green-800',
@@ -25,6 +25,7 @@ function App() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -45,12 +46,32 @@ function App() {
     return () => controller.abort()
   }, [])
 
+  const filteredOrders = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (!term) return orders
+    return orders.filter(
+      (order) =>
+        order.customer?.name?.toLowerCase().includes(term) ||
+        order.customer?.email?.toLowerCase().includes(term),
+    )
+  }, [orders, query])
+
   if (loading) return <p className="p-6 text-gray-500">Loading orders…</p>
   if (error) return <p role="alert" className="p-6 text-red-600">Could not load orders: {error}</p>
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <h1 className="mb-4 text-2xl font-semibold text-gray-900">Orders</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by customer name or email"
+          aria-label="Search orders by customer name or email"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 sm:w-80"
+        />
+      </div>
       <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
           <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
@@ -65,14 +86,14 @@ function App() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white text-gray-700">
-            {orders.length === 0 ? (
+            {filteredOrders.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                  No orders found
+                  {query.trim() ? 'No orders match your search' : 'No orders found'}
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
+              filteredOrders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">{order.id}</td>
                   <td className="max-w-xs break-words px-4 py-3">{order.customer?.name || '—'}</td>
