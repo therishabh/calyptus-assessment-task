@@ -20,6 +20,22 @@ const SORT_VALUES = {
   },
 }
 
+// Sums in minor units (cents) so float rounding doesn't leak into the totals
+const paidTotalsByCurrency = (orders) => {
+  const groups = {}
+  for (const order of orders) {
+    if (order.status !== 'paid') continue
+    const amount = SORT_VALUES.total(order)
+    if (amount === null) continue
+    const group = (groups[order.currency] ??= { cents: 0, count: 0 })
+    group.cents += Math.round(amount * 100)
+    group.count += 1
+  }
+  return Object.entries(groups)
+    .map(([currency, { cents, count }]) => ({ currency, total: cents / 100, count }))
+    .sort((a, b) => a.currency.localeCompare(b.currency))
+}
+
 const formatTotal = (total, currency) => {
   if (total === null || total === undefined || total === '') return '—'
   const amount = Number(total)
@@ -91,6 +107,8 @@ function App() {
     })
   }, [orders, query, status])
 
+  const paidTotals = useMemo(() => paidTotalsByCurrency(orders), [orders])
+
   const sortedOrders = useMemo(() => {
     if (!sort.key) return filteredOrders
     const getValue = SORT_VALUES[sort.key]
@@ -121,6 +139,28 @@ function App() {
 
   return (
     <div className="mx-auto max-w-6xl p-6">
+      <section aria-labelledby="paid-summary-heading" className="mb-6">
+        <h2 id="paid-summary-heading" className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-600">
+          Paid orders total
+        </h2>
+        {paidTotals.length === 0 ? (
+          <p className="text-sm text-gray-500">No paid orders</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {paidTotals.map(({ currency, total, count }) => (
+              <div key={currency} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-medium text-gray-500">{currency}</p>
+                <p className="text-2xl font-semibold tabular-nums text-gray-900">
+                  {formatTotal(total, currency)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {count} paid {count === 1 ? 'order' : 'orders'}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
         <div className="flex w-full flex-wrap gap-3 sm:w-auto">
