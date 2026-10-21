@@ -5,6 +5,30 @@ const SLOW_NOTICE_MS = 3000
 
 class LoadError extends Error {}
 
+// Lets the error UI be previewed without breaking the real endpoint:
+//   ?error=1 (or network), 404, 500, json, shape, timeout
+const requestOrders = (signal) => {
+  const forced = new URLSearchParams(window.location.search).get('error')
+  switch (forced) {
+    case null:
+      return fetch('/orders.json', { signal })
+    case '404':
+      return Promise.resolve(new Response('Not Found', { status: 404, statusText: 'Not Found' }))
+    case '500':
+      return Promise.resolve(new Response('Oops', { status: 500, statusText: 'Internal Server Error' }))
+    case 'json':
+      return Promise.resolve(new Response('<html>not json</html>'))
+    case 'shape':
+      return Promise.resolve(new Response('{}'))
+    case 'timeout':
+      return new Promise((_, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason))
+      })
+    default:
+      return Promise.reject(new TypeError('Failed to fetch'))
+  }
+}
+
 const STATUS_STYLES = {
   paid: 'bg-green-100 text-green-800',
   pending: 'bg-yellow-100 text-yellow-800',
@@ -124,7 +148,7 @@ function App() {
     const controller = new AbortController()
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
 
-    fetch('/orders.json', { signal })
+    requestOrders(signal)
       .then(async (res) => {
         if (!res.ok) throw new LoadError(`The server responded with ${res.status} ${res.statusText}`.trim())
         try {
