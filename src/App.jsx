@@ -72,10 +72,20 @@ const formatTotal = (total, currency) => {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount)
 }
 
+// Locale and timezone are both taken from the viewer's browser (undefined = default)
+const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZoneName: 'short',
+})
+
 const formatDateTime = (iso) => {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  return dateTimeFormat.format(date)
 }
 
 function LoadingSkeleton({ slow }) {
@@ -336,7 +346,11 @@ function App() {
                       {order.status}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatDateTime(order.created_at)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <time dateTime={order.created_at} title={order.created_at}>
+                      {formatDateTime(order.created_at)}
+                    </time>
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">{order.items}</td>
                 </tr>
               ))
