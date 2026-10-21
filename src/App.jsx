@@ -26,6 +26,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('all')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -46,15 +47,21 @@ function App() {
     return () => controller.abort()
   }, [])
 
+  const statuses = useMemo(() => [...new Set(orders.map((o) => o.status))].sort(), [orders])
+
   const filteredOrders = useMemo(() => {
     const term = query.trim().toLowerCase()
-    if (!term) return orders
-    return orders.filter(
-      (order) =>
+    return orders.filter((order) => {
+      if (status !== 'all' && order.status !== status) return false
+      if (!term) return true
+      return (
         order.customer?.name?.toLowerCase().includes(term) ||
-        order.customer?.email?.toLowerCase().includes(term),
-    )
-  }, [orders, query])
+        order.customer?.email?.toLowerCase().includes(term)
+      )
+    })
+  }, [orders, query, status])
+
+  const isFiltering = query.trim() !== '' || status !== 'all'
 
   if (loading) return <p className="p-6 text-gray-500">Loading orders…</p>
   if (error) return <p role="alert" className="p-6 text-red-600">Could not load orders: {error}</p>
@@ -63,14 +70,29 @@ function App() {
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by customer name or email"
-          aria-label="Search orders by customer name or email"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 sm:w-80"
-        />
+        <div className="flex w-full flex-wrap gap-3 sm:w-auto">
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            aria-label="Filter orders by status"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm capitalize shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          >
+            <option value="all">All statuses</option>
+            {statuses.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by customer name or email"
+            aria-label="Search orders by customer name or email"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0 flex-1 sm:w-80 sm:flex-none"
+          />
+        </div>
       </div>
       <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
@@ -89,7 +111,7 @@ function App() {
             {filteredOrders.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                  {query.trim() ? 'No orders match your search' : 'No orders found'}
+                  {isFiltering ? 'No orders match your filters' : 'No orders found'}
                 </td>
               </tr>
             ) : (
