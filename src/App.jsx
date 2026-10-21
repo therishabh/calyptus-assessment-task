@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import './App.css'
+
+const STATUS_STYLES = {
+  paid: 'bg-green-100 text-green-800',
+  pending: 'bg-yellow-100 text-yellow-800',
+  refunded: 'bg-blue-100 text-blue-800',
+  failed: 'bg-red-100 text-red-800',
+  chargeback: 'bg-orange-100 text-orange-800',
+}
 
 const formatTotal = (total, currency) => {
   if (total === null || total === undefined || total === '') return '—'
@@ -38,42 +45,59 @@ function App() {
     return () => controller.abort()
   }, [])
 
-  if (loading) return <p>Loading orders…</p>
-  if (error) return <p role="alert">Could not load orders: {error}</p>
+  if (loading) return <p className="p-6 text-gray-500">Loading orders…</p>
+  if (error) return <p role="alert" className="p-6 text-red-600">Could not load orders: {error}</p>
 
   return (
-    <table className="orders-table">
-      <thead>
-        <tr>
-          <th>Order ID</th>
-          <th>Customer</th>
-          <th>Email</th>
-          <th>Total</th>
-          <th>Status</th>
-          <th>Date &amp; Time</th>
-          <th>Items</th>
-        </tr>
-      </thead>
-      <tbody>
-        {orders.length === 0 ? (
-          <tr>
-            <td colSpan={7}>No orders found</td>
-          </tr>
-        ) : (
-          orders.map((order) => (
-            <tr key={order.id}>
-              <td>{order.id}</td>
-              <td>{order.customer?.name || '—'}</td>
-              <td>{order.customer?.email || '—'}</td>
-              <td>{formatTotal(order.total, order.currency)}</td>
-              <td>{order.status}</td>
-              <td>{formatDateTime(order.created_at)}</td>
-              <td>{order.items}</td>
+    <div className="mx-auto max-w-6xl p-6">
+      <h1 className="mb-4 text-2xl font-semibold text-gray-900">Orders</h1>
+      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+        <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+          <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
+            <tr>
+              <th className="px-4 py-3">Order ID</th>
+              <th className="px-4 py-3">Customer</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3 text-right">Total</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Date &amp; Time</th>
+              <th className="px-4 py-3 text-right">Items</th>
             </tr>
-          ))
-        )}
-      </tbody>
-    </table>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white text-gray-700">
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                  No orders found
+                </td>
+              </tr>
+            ) : (
+              orders.map((order) => (
+                <tr key={order.id} className="hover:bg-gray-50">
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">{order.id}</td>
+                  <td className="max-w-xs break-words px-4 py-3">{order.customer?.name || '—'}</td>
+                  <td className="max-w-xs break-all px-4 py-3">{order.customer?.email || '—'}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                    {formatTotal(order.total, order.currency)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
+                        STATUS_STYLES[order.status] ?? 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {order.status}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3">{formatDateTime(order.created_at)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{order.items}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
