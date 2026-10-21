@@ -8,6 +8,18 @@ const STATUS_STYLES = {
   chargeback: 'bg-orange-100 text-orange-800',
 }
 
+const SORT_VALUES = {
+  total: (order) => {
+    if (order.total === null || order.total === undefined || order.total === '') return null
+    const n = Number(order.total)
+    return Number.isNaN(n) ? null : n
+  },
+  date: (order) => {
+    const t = new Date(order.created_at).getTime()
+    return Number.isNaN(t) ? null : t
+  },
+}
+
 const formatTotal = (total, currency) => {
   if (total === null || total === undefined || total === '') return '—'
   const amount = Number(total)
@@ -21,12 +33,30 @@ const formatDateTime = (iso) => {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+function SortButton({ label, active, dir, onClick, align }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 font-semibold uppercase tracking-wide hover:text-gray-900 ${
+        align === 'right' ? 'flex-row-reverse' : ''
+      } ${active ? 'text-gray-900' : ''}`}
+    >
+      {label}
+      <span aria-hidden="true" className={active ? '' : 'text-gray-300'}>
+        {active ? (dir === 'asc' ? '▲' : '▼') : '↕'}
+      </span>
+    </button>
+  )
+}
+
 function App() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
+  const [sort, setSort] = useState({ key: null, dir: 'asc' })
 
   useEffect(() => {
     const controller = new AbortController()
@@ -60,6 +90,29 @@ function App() {
       )
     })
   }, [orders, query, status])
+
+  const sortedOrders = useMemo(() => {
+    if (!sort.key) return filteredOrders
+    const getValue = SORT_VALUES[sort.key]
+    const factor = sort.dir === 'asc' ? 1 : -1
+    return [...filteredOrders].sort((a, b) => {
+      const va = getValue(a)
+      const vb = getValue(b)
+      // Missing values always go last, whichever direction is active
+      if (va === null && vb === null) return 0
+      if (va === null) return 1
+      if (vb === null) return -1
+      return (va - vb) * factor
+    })
+  }, [filteredOrders, sort])
+
+  const toggleSort = (key) =>
+    setSort((prev) =>
+      prev.key !== key ? { key, dir: 'asc' } : { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' },
+    )
+
+  const ariaSort = (key) =>
+    sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
 
   const isFiltering = query.trim() !== '' || status !== 'all'
 
@@ -101,9 +154,13 @@ function App() {
               <th className="px-4 py-3">Order ID</th>
               <th className="px-4 py-3">Customer</th>
               <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3 text-right">Total</th>
+              <th className="px-4 py-3 text-right" aria-sort={ariaSort('total')}>
+                <SortButton label="Total" active={sort.key === 'total'} dir={sort.dir} onClick={() => toggleSort('total')} align="right" />
+              </th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Date &amp; Time</th>
+              <th className="px-4 py-3" aria-sort={ariaSort('date')}>
+                <SortButton label="Date &amp; Time" active={sort.key === 'date'} dir={sort.dir} onClick={() => toggleSort('date')} />
+              </th>
               <th className="px-4 py-3 text-right">Items</th>
             </tr>
           </thead>
@@ -115,7 +172,7 @@ function App() {
                 </td>
               </tr>
             ) : (
-              filteredOrders.map((order) => (
+              sortedOrders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">{order.id}</td>
                   <td className="max-w-xs break-words px-4 py-3">{order.customer?.name || '—'}</td>
